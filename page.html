@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>WorkerSync</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Variables ──────────────────────────────────────────── */
+:root {
+  --cyan:     #00f0ff;
+  --lime:     #c8ff57;
+  --rose:     #ff2d6f;
+  --blue:     #3d7fff;
+  --violet:   #9b5de5;
+  --orange:   #ff6b2b;
+
+  --g-bg:     rgba(255,255,255,0.035);
+  --g-bdr:    rgba(255,255,255,0.06);
+  --g-top:    rgba(255,255,255,0.12);
+  --g-shine:  rgba(255,255,255,0.05);
+
+  --t1: #deeaff;
+  --t2: rgba(180,205,255,0.6);
+  --t3: rgba(140,170,230,0.35);
+
+  --r: 14px;
+  --r-sm: 9px;
+}
+
+/* ── Reset ──────────────────────────────────────────────── */
+*,*::before,*::after { margin:0; padding:0; box-sizing:border-box; }
+html,body { min-height:100vh; overflow-x:hidden; }
+
+body {
+  font-family: 'Syne', sans-serif;
+  color: var(--t1);
+  background:
+    radial-gradient(ellipse 90% 80% at 5% 45%,  rgba(20,0,80,0.55)   0%, transparent 60%),
+    radial-gradient(ellipse 70% 65% at 95% 10%,  rgba(0,60,180,0.4)   0%, transparent 55%),
+    radial-gradient(ellipse 55% 60% at 55% 95%,  rgba(0,120,140,0.25) 0%, transparent 55%),
+    radial-gradient(ellipse 40% 40% at 80% 70%,  rgba(80,0,140,0.2)   0%, transparent 50%),
+    linear-gradient(168deg, #02000b 0%, #050011 25%, #020c18 55%, #04001c 100%);
+  background-attachment: fixed;
+  padding-bottom: 72px;
+}
+
+/* ── Orbs ───────────────────────────────────────────────── */
+.orbs { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+.orb  { position:absolute; border-radius:50%; filter:blur(100px); }
+.o1 { width:50vw;height:50vw; background:radial-gradient(circle,rgba(40,0,180,0.18),transparent 70%); top:-12%; left:-8%; animation:of 30s ease-in-out infinite; }
+.o2 { width:38vw;height:38vw; background:radial-gradient(circle,rgba(0,90,220,0.16),transparent 70%); top:25%; right:-6%; animation:of 24s ease-in-out infinite; animation-delay:-10s; }
+.o3 { width:32vw;height:32vw; background:radial-gradient(circle,rgba(100,0,200,0.14),transparent 70%); bottom:8%; left:28%; animation:of 20s ease-in-out infinite; animation-delay:-17s; }
+.o4 { width:24vw;height:24vw; background:radial-gradient(circle,rgba(0,150,180,0.1),transparent 70%); bottom:25%; right:15%; animation:of 26s ease-in-out infinite; animation-delay:-6s; }
+@keyframes of {
+  0%,100%{transform:translate(0,0) scale(1)}
+  25%{transform:translate(4%,-5%) scale(1.06)}
+  50%{transform:translate(-3%,7%) scale(0.94)}
+  75%{transform:translate(6%,2%) scale(1.03)}
+}
+
+/* ── Shell ──────────────────────────────────────────────── */
+.wrap { position:relative; z-index:1; max-width:860px; margin:0 auto; padding:20px 14px; }
+
+/* ── Glass ──────────────────────────────────────────────── */
+.g {
+  background: var(--g-bg);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--g-bdr);
+  border-top-color: var(--g-top);
+  border-left-color: rgba(255,255,255,0.08);
+  border-radius: var(--r);
+  box-shadow:
+    0 0 0 0.5px rgba(0,0,0,0.35),
+    0 10px 40px rgba(0,0,0,0.4),
+    inset 0 1px 0 var(--g-shine);
+}
+
+/* ── App Header ─────────────────────────────────────────── */
+.app-header {
+  text-align: center;
+  padding: 26px 0 20px;
+}
+.app-header h1 {
+  font-size: clamp(1.7rem,5.5vw,2.6rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 30px rgba(0,240,255,0.7), 0 0 70px rgba(0,240,255,0.25);
+}
+.app-header small {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-top: 4px;
+  font-family: 'DM Mono', monospace;
+}
+
+/* ── Tabs ───────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.tab-bar button {
+  flex:1;
+  padding: 9px 10px;
+  border-radius: var(--r-sm);
+  font: 600 0.73rem/1 'Syne', sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 1px solid var(--g-bdr);
+  background: var(--g-bg);
+  backdrop-filter: blur(12px);
+  color: var(--t2);
+  transition: all 0.22s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.tab-bar button i { font-size:0.85rem; color:var(--t3); }
+.tab-bar button.active {
+  background: rgba(0,240,255,0.07);
+  border-color: rgba(0,240,255,0.28);
+  color: var(--cyan);
+  text-shadow: 0 0 12px rgba(0,240,255,0.6);
+  box-shadow: 0 0 18px rgba(0,240,255,0.08), inset 0 1px 0 rgba(0,240,255,0.1);
+}
+.tab-bar button.active i { color:var(--cyan); }
+.tab-bar button:hover:not(.active) {
+  border-color: rgba(255,255,255,0.1);
+  color: var(--t1);
+  background: rgba(255,255,255,0.05);
+}
+
+/* ── Sections ───────────────────────────────────────────── */
+.sec { padding:18px; margin-bottom:12px; }
+.tabcontent { display:none; }
+.tabcontent.active { display:block; animation: fadeIn 0.25s ease; }
+
+/* ── Form ───────────────────────────────────────────────── */
+.fg   { margin-bottom:12px; }
+.fr   { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.fl   { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px; }
+
+label {
+  display: block;
+  font: 500 0.68rem/1 'DM Mono', monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t2);
+  margin-bottom: 5px;
+}
+label i { margin-right:4px; font-size:0.7rem; }
+
+input, select {
+  width:100%;
+  padding: 9px 11px;
+  border-radius: var(--r-sm);
+  font: 400 0.86rem/1 'Syne', sans-serif;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  color: var(--t1);
+  outline: none;
+  transition: all 0.2s;
+}
+input::placeholder { color:var(--t3); font-size:0.82rem; }
+select option { background:#0a0018; color:var(--t1); }
+input:focus, select:focus {
+  border-color: rgba(0,240,255,0.38);
+  box-shadow: 0 0 0 2px rgba(0,240,255,0.08), 0 0 14px rgba(0,240,255,0.07);
+  background: rgba(0,240,255,0.025);
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7) sepia(1) hue-rotate(175deg) saturate(1.5);
+  cursor: pointer;
+}
+
+/* ── Buttons ────────────────────────────────────────────── */
+.btn {
+  padding: 9px 18px;
+  border-radius: var(--r-sm);
+  font: 700 0.73rem/1 'Syne', sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.btn-p {
+  background: linear-gradient(135deg, #1440e0, #00b8d4);
+  color: #fff;
+  box-shadow: 0 3px 18px rgba(0,140,210,0.28);
+}
+.btn-p:hover { transform:translateY(-1px); box-shadow:0 0 22px rgba(0,210,240,0.45),0 4px 14px rgba(0,80,180,0.3); }
+.btn-sm { padding:5px 9px; font-size:0.68rem; border-radius:6px; }
+.btn-e {
+  background: rgba(61,127,255,0.1);
+  border: 1px solid rgba(61,127,255,0.28);
+  color: #7da4ff;
+}
+.btn-e:hover { background:rgba(61,127,255,0.18); box-shadow:0 0 10px rgba(61,127,255,0.28); }
+.btn-d {
+  background: rgba(255,45,111,0.1);
+  border: 1px solid rgba(255,45,111,0.28);
+  color: #ff7da0;
+}
+.btn-d:hover { background:rgba(255,45,111,0.18); box-shadow:0 0 10px rgba(255,45,111,0.28); }
+.btn-q {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  color: var(--t2);
+}
+.btn-q:hover { background:rgba(255,255,255,0.08); }
+.btn.loading { opacity:0.55; cursor:not-allowed; pointer-events:none; }
+.btn.loading::after {
+  content:'';
+  position:absolute;
+  inset:0;
+  background:linear-gradient(90deg,transparent 25%,rgba(255,255,255,0.12) 50%,transparent 75%);
+  animation:shimmer 1.2s infinite;
+}
+@keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(200%)} }
+
+/* ── Section Headings ───────────────────────────────────── */
+h2 {
+  font-size: clamp(0.82rem,2.5vw,1rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 14px rgba(0,240,255,0.45);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+h2 i { font-size:0.9em; }
+h3 {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t2);
+  margin: 18px 0 10px;
+  font-family: 'DM Mono', monospace;
+}
+
+/* ── Chips ──────────────────────────────────────────────── */
+.chip { display:inline-block; padding:3px 8px; border-radius:20px; font:700 0.65rem/1.4 'DM Mono',monospace; letter-spacing:0.07em; text-transform:uppercase; }
+.cp   { background:rgba(200,255,87,0.1);  color:#c8ff57; border:1px solid rgba(200,255,87,0.28); }
+.ca   { background:rgba(255,45,111,0.1);  color:#ff7da0; border:1px solid rgba(255,45,111,0.28); }
+.ch   { background:rgba(255,107,43,0.1);  color:#ff9a6b; border:1px solid rgba(255,107,43,0.28); }
+.co   { background:rgba(0,240,255,0.08);  color:var(--cyan); border:1px solid rgba(0,240,255,0.28); }
+.ct   { background:rgba(155,93,229,0.1);  color:#c77dff; border:1px solid rgba(155,93,229,0.28); }
+
+/* ── Tables ─────────────────────────────────────────────── */
+.tw { overflow-x:auto; margin-top:12px; border-radius:var(--r); border:1px solid var(--g-bdr); }
+table { width:100%; border-collapse:collapse; min-width:300px; }
+thead tr { background:rgba(0,240,255,0.05); border-bottom:1px solid rgba(0,240,255,0.12); }
+th {
+  padding:11px 13px;
+  text-align:left;
+  font:600 0.67rem/1 'DM Mono',monospace;
+  letter-spacing:0.14em;
+  text-transform:uppercase;
+  color:var(--cyan);
+}
+td { padding:9px 13px; font-size:0.83rem; color:var(--t1); border-bottom:1px solid rgba(255,255,255,0.04); }
+tr:last-child td { border-bottom:none; }
+tbody tr:hover td { background:rgba(255,255,255,0.025); }
+tfoot td {
+  font:700 0.83rem/1 'DM Mono',monospace;
+  color:var(--lime);
+  text-shadow:0 0 10px rgba(200,255,87,0.35);
+  border-top:1px solid rgba(200,255,87,0.18);
+  padding-top:11px;
+}
+.date-row td {
+  padding:9px 13px;
+  font:600 0.68rem/1 'DM Mono',monospace;
+  letter-spacing:0.11em;
+  text-transform:uppercase;
+  color:var(--cyan);
+  background:rgba(0,240,255,0.04);
+  border-top:1px solid rgba(0,240,255,0.1);
+  border-bottom:1px solid rgba(0,240,255,0.07);
+}
+.sep-row td { padding:0; }
+.sep-row hr { border:none; border-top:1px solid rgba(255,255,255,0.04); }
+
+/* ── Messages ───────────────────────────────────────────── */
+.msg { margin-top:9px; padding:8px 11px; border-radius:var(--r-sm); font-size:0.8rem; font-weight:600; letter-spacing:0.04em; }
+.ok  { background:rgba(0,210,100,0.08); color:#00e676; border:1px solid rgba(0,210,100,0.2); }
+.er  { background:rgba(255,45,111,0.08); color:#ff7da0; border:1px solid rgba(255,45,111,0.2); }
+
+/* ── Modal ──────────────────────────────────────────────── */
+.modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.72); backdrop-filter:blur(10px); z-index:100; align-items:center; justify-content:center; }
+.modal.open { display:flex; animation:fadeIn 0.2s; }
+.mbox { width:90%; max-width:400px; padding:22px; position:relative; animation:slideUp 0.22s ease; }
+.mbox h4 {
+  font-size:0.8rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase;
+  color:var(--cyan); text-shadow:0 0 12px rgba(0,240,255,0.4); margin-bottom:14px;
+  display:flex; align-items:center; gap:7px;
+}
+.mc { position:absolute; top:12px; right:14px; background:none; border:none; color:var(--t2); font-size:1.1rem; cursor:pointer; transition:color 0.2s; padding:0; line-height:1; }
+.mc:hover { color:var(--rose); }
+
+/* ── Quick actions bar ──────────────────────────────────── */
+.qa { display:flex; gap:7px; flex-wrap:wrap; margin-bottom:12px; }
+
+/* ── Search row ─────────────────────────────────────────── */
+.sr { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px; }
+
+/* ── Divider ────────────────────────────────────────────── */
+.dv { height:1px; background:linear-gradient(90deg,transparent,rgba(0,240,255,0.12),transparent); margin:16px 0; }
+
+/* ── Bottom Nav ─────────────────────────────────────────── */
+.bnav {
+  position:fixed; bottom:0; left:0; right:0;
+  background:rgba(3,0,14,0.88);
+  backdrop-filter:blur(28px) saturate(160%);
+  -webkit-backdrop-filter:blur(28px) saturate(160%);
+  border-top:1px solid rgba(0,240,255,0.07);
+  display:flex; justify-content:space-around;
+  padding:9px 0 13px; z-index:50;
+}
+.bnav button {
+  background:none; border:none;
+  color:var(--t3); font:700 0.64rem/1 'Syne',sans-serif;
+  letter-spacing:0.09em; text-transform:uppercase;
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:4px;
+  cursor:pointer; transition:color 0.2s; padding:0;
+}
+.bnav button i { font-size:1.15rem; }
+.bnav button.active { color:var(--cyan); text-shadow:0 0 8px rgba(0,240,255,0.5); }
+.bnav button.active i { filter:drop-shadow(0 0 5px rgba(0,240,255,0.7)); }
+
+/* ── Animations ─────────────────────────────────────────── */
+@keyframes fadeIn  { from{opacity:0}         to{opacity:1} }
+@keyframes slideUp { from{transform:translateY(18px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media(min-width:768px) {
+  body { padding-bottom:20px; }
+  .bnav { display:none; }
+  .tab-bar { display:flex; }
+  .wrap { padding:26px 20px; }
+}
+@media(max-width:767px) {
+  .tab-bar { display:none; }
+  .fr  { grid-template-columns:1fr; }
+  .sr  { grid-template-columns:1fr; }
+  .tw  { border-radius:var(--r-sm); }
+  table { font-size:0.8rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="orbs">
+  <div class="orb o1"></div>
+  <div class="orb o2"></div>
+  <div class="orb o3"></div>
+  <div class="orb o4"></div>
+</div>
+
+<div class="wrap">
+  <div class="app-header">
+    <h1 id="appTitle">WorkerSync</h1>
+    <small id="appSub">Workforce Attendance Manager</small>
+  </div>
+
+  <!-- Desktop tabs -->
+  <div class="tab-bar">
+    <button class="tablinks" onclick="openTab(event,'workers')"><i class="fas fa-users"></i> Workers</button>
+    <button class="tablinks" onclick="openTab(event,'attendance')"><i class="fas fa-calendar-check"></i> Attendance</button>
+    <button class="tablinks" onclick="openTab(event,'reports')"><i class="fas fa-chart-bar"></i> Reports</button>
+  </div>
+
+  <!-- ─── WORKERS ─── -->
+  <div id="workers" class="tabcontent">
+    <div class="g sec">
+      <h2><i class="fas fa-user-plus"></i> Add / Update Worker</h2>
+      <div class="fr">
+        <div class="fg"><label><i class="fas fa-user"></i> Name</label><input type="text" id="workerName" placeholder="Full name"></div>
+        <div class="fg"><label><i class="fas fa-coins"></i> Daily Pay Rate</label><input type="number" id="payRate" placeholder="0.00" min="0" step="0.01"></div>
+      </div>
+      <button class="btn btn-p" id="workerSubmitBtn" onclick="handleWorkerSubmit()"><i class="fas fa-save"></i> Save Worker</button>
+      <div id="workerMessage"></div>
+    </div>
+
+    <div class="g sec">
+      <h2><i class="fas fa-users"></i> Current Workers</h2>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Name</th><th>Pay Rate</th><th>Actions</th></tr></thead>
+          <tbody id="workersList"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ATTENDANCE ─── -->
+  <div id="attendance" class="tabcontent">
+    <div class="g sec">
+      <h2><i class="fas fa-calendar-plus"></i> Record Attendance</h2>
+      <div class="fg"><label><i class="fas fa-calendar"></i> Date</label><input type="date" id="attendanceDate"></div>
+      <div class="qa">
+        <button class="btn btn-sm btn-e" onclick="markAll('1')"><i class="fas fa-check-double"></i> All Present</button>
+        <button class="btn btn-sm btn-d" onclick="markAll('0')"><i class="fas fa-times"></i> All Absent</button>
+        <button class="btn btn-sm btn-q" onclick="markAll('')"><i class="fas fa-eraser"></i> Clear</button>
+      </div>
+      <div id="attendanceFields"></div>
+      <div style="margin-top:14px">
+        <button class="btn btn-p" id="attSubmitBtn" onclick="submitAttendance()"><i class="fas fa-check"></i> Submit Attendance</button>
+      </div>
+      <div id="attendanceMessage"></div>
+    </div>
+
+    <div class="g sec">
+      <h2><i class="fas fa-edit"></i> Correct Attendance</h2>
+      <div class="sr">
+        <div class="fg"><label><i class="fas fa-calendar"></i> Date</label><input type="date" id="correctionDate"></div>
+        <div class="fg"><label><i class="fas fa-search"></i> Worker</label><input type="text" id="searchWorker" placeholder="Name..."></div>
+      </div>
+      <button class="btn btn-p" id="searchBtn" onclick="searchAttendance()"><i class="fas fa-search"></i> Search</button>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Date</th><th>Worker</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="correctionData"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── REPORTS ─── -->
+  <div id="reports" class="tabcontent">
+    <div class="g sec">
+      <h2><i class="fas fa-chart-line"></i> Generate Report</h2>
+      <div class="fr">
+        <div class="fg"><label><i class="fas fa-calendar-alt"></i> From</label><input type="date" id="startDate"></div>
+        <div class="fg"><label><i class="fas fa-calendar-alt"></i> To</label><input type="date" id="endDate"></div>
+      </div>
+      <button class="btn btn-p" id="reportBtn" onclick="refreshReports()"><i class="fas fa-chart-line"></i> Generate</button>
+    </div>
+
+    <div class="g sec">
+      <h3><i class="fas fa-receipt"></i> Pay Report</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Worker</th><th>Days</th><th>Total Pay</th></tr></thead>
+          <tbody id="reportData"></tbody>
+          <tfoot>
+            <tr id="totalRow" style="display:none">
+              <td colspan="2" style="text-align:right;color:var(--t2);font-size:0.67rem;letter-spacing:0.12em;text-transform:uppercase;font-family:'DM Mono',monospace">Grand Total</td>
+              <td id="totalAmountCell"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+
+    <div class="g sec">
+      <h3><i class="fas fa-history"></i> Attendance History</h3>
+      <div class="tw">
+        <table><tbody id="attendanceHistoryData"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom nav -->
+<div class="bnav">
+  <button class="tablinks" onclick="openTab(event,'workers')"><i class="fas fa-users"></i> Workers</button>
+  <button class="tablinks" onclick="openTab(event,'attendance')"><i class="fas fa-calendar-check"></i> Attend</button>
+  <button class="tablinks" onclick="openTab(event,'reports')"><i class="fas fa-chart-bar"></i> Reports</button>
+</div>
+
+<!-- Edit Attendance Modal -->
+<div id="editModal" class="modal">
+  <div class="mbox g">
+    <button class="mc" onclick="closeModal('editModal')"><i class="fas fa-times"></i></button>
+    <h4><i class="fas fa-edit"></i> Edit Attendance</h4>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<!-- Edit Worker Modal -->
+<div id="editWorkerModal" class="modal">
+  <div class="mbox g">
+    <button class="mc" onclick="closeModal('editWorkerModal')"><i class="fas fa-times"></i></button>
+    <h4><i class="fas fa-user-edit"></i> Edit Worker</h4>
+    <div id="workerModalContent"></div>
+  </div>
+</div>
+
+<script>
+/* ── State ──────────────────────────────────────────── */
+let CUR_ATTEND = null;
+let CUR_WORKER = null;
+let CX = '₹';
+
+/* ── Init ───────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  loadConfig();
+  loadWorkers();
+  loadAttendanceWorkers();
+  activateTab('workers');
+  const t = fmtDate(new Date());
+  ['attendanceDate','startDate','endDate'].forEach(id => { document.getElementById(id).value = t; });
+});
+
+function loadConfig() {
+  google.script.run
+    .withSuccessHandler(c => {
+      CX = c.currencySymbol || '₹';
+      if (c.appName)    document.getElementById('appTitle').textContent = c.appName;
+      if (c.companyName) document.getElementById('appSub').textContent = c.companyName;
+    })
+    .withFailureHandler(() => {})
+    .getConfig();
+}
+
+/* ── Tabs ───────────────────────────────────────────── */
+function openTab(e, name) {
+  document.querySelectorAll('.tabcontent').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tablinks').forEach(el => el.classList.remove('active'));
+  document.getElementById(name).classList.add('active');
+  e.currentTarget.classList.add('active');
+  // Sync all buttons pointing to same tab
+  document.querySelectorAll('.tablinks').forEach(btn => {
+    if ((btn.getAttribute('onclick') || '').includes(`'${name}'`)) btn.classList.add('active');
+  });
+}
+
+function activateTab(name) {
+  document.querySelectorAll('.tabcontent').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tablinks').forEach(el => el.classList.remove('active'));
+  document.getElementById(name).classList.add('active');
+  document.querySelectorAll('.tablinks').forEach(btn => {
+    if ((btn.getAttribute('onclick') || '').includes(`'${name}'`)) btn.classList.add('active');
+  });
+}
+
+/* ── Workers ────────────────────────────────────────── */
+function handleWorkerSubmit() {
+  const btn  = document.getElementById('workerSubmitBtn');
+  const name = document.getElementById('workerName').value.trim();
+  const pay  = document.getElementById('payRate').value;
+  if (!name) { showMsg('workerMessage','Name is required.',false); return; }
+  if (!pay || isNaN(pay) || +pay < 0) { showMsg('workerMessage','Enter a valid pay rate.',false); return; }
+  setLoading(btn, true);
+  google.script.run
+    .withSuccessHandler(() => {
+      showMsg('workerMessage','Worker saved.',true);
+      document.getElementById('workerName').value='';
+      document.getElementById('payRate').value='';
+      loadWorkers(); loadAttendanceWorkers();
+      setLoading(btn, false);
+    })
+    .withFailureHandler(e => { showMsg('workerMessage','Error: '+e.message,false); setLoading(btn,false); })
+    .addOrUpdateWorker(name, pay);
+}
+
+function loadWorkers() {
+  google.script.run
+    .withSuccessHandler(ws => {
+      document.getElementById('workersList').innerHTML = ws.length
+        ? ws.map(w => `<tr>
+            <td>${esc(w[0])}</td>
+            <td style="font-family:'DM Mono',monospace">${CX}${(+w[1]).toLocaleString()}</td>
+            <td><div style="display:flex;gap:5px">
+              <button class="btn btn-sm btn-e" onclick="openEditWorker('${esc(w[0])}',${w[1]})"><i class="fas fa-edit"></i></button>
+              <button class="btn btn-sm btn-d" onclick="confirmDelWorker('${esc(w[0])}')"><i class="fas fa-trash"></i></button>
+            </div></td></tr>`).join('')
+        : '<tr><td colspan="3" style="color:var(--t3);font-style:italic;text-align:center;padding:16px">No workers yet.</td></tr>';
+    })
+    .withFailureHandler(e => alert('Load workers: '+e.message))
+    .getWorkers();
+}
+
+function openEditWorker(name, pay) {
+  CUR_WORKER = { orig: name };
+  document.getElementById('workerModalContent').innerHTML = `
+    <div class="fg"><label>Name</label><input type="text" id="ewName" value="${esc(name)}"></div>
+    <div class="fg"><label>Daily Pay Rate</label><input type="number" id="ewPay" value="${pay}" min="0" step="0.01"></div>
+    <button class="btn btn-p" id="saveWBtn" onclick="saveWorker()"><i class="fas fa-save"></i> Save</button>`;
+  document.getElementById('editWorkerModal').classList.add('open');
+}
+
+function saveWorker() {
+  const btn = document.getElementById('saveWBtn');
+  const n   = document.getElementById('ewName').value.trim();
+  const p   = document.getElementById('ewPay').value;
+  if (!n) { alert('Name required.'); return; }
+  setLoading(btn, true);
+  google.script.run
+    .withSuccessHandler(() => { closeModal('editWorkerModal'); loadWorkers(); loadAttendanceWorkers(); setLoading(btn,false); })
+    .withFailureHandler(e => { alert('Error: '+e.message); setLoading(btn,false); })
+    .editWorker(CUR_WORKER.orig, n, p);
+}
+
+function confirmDelWorker(name) {
+  if (!confirm(`Delete "${name}"? Attendance records will remain.`)) return;
+  google.script.run
+    .withSuccessHandler(() => { loadWorkers(); loadAttendanceWorkers(); })
+    .withFailureHandler(e => alert('Error: '+e.message))
+    .deleteWorker(name);
+}
+
+/* ── Attendance ─────────────────────────────────────── */
+function loadAttendanceWorkers() {
+  google.script.run
+    .withSuccessHandler(names => {
+      document.getElementById('attendanceFields').innerHTML = names.length
+        ? names.map(n => `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center;margin-bottom:8px">
+            <label style="margin-bottom:0;font-size:0.82rem;color:var(--t1)">${esc(n)}</label>
+            <select class="att-sel" data-worker="${esc(n)}">
+              <option value="">— Select —</option>
+              <option value="2">Two Days (2.0)</option>
+              <option value="1.5">One &amp; Half (1.5)</option>
+              <option value="1">Present (1.0)</option>
+              <option value="0.5">Half Day (0.5)</option>
+              <option value="0">Absent (0)</option>
+            </select>
+          </div>`).join('')
+        : '<p style="color:var(--t3);font-style:italic;font-size:0.82rem">Add workers first.</p>';
+    })
+    .withFailureHandler(e => alert('Error: '+e.message))
+    .getWorkerNames();
+}
+
+function markAll(val) { document.querySelectorAll('.att-sel').forEach(s => s.value = val); }
+
+function submitAttendance() {
+  const btn  = document.getElementById('attSubmitBtn');
+  const date = document.getElementById('attendanceDate').value;
+  if (!date) { showMsg('attendanceMessage','Select a date.',false); return; }
+
+  const data = {};
+  document.querySelectorAll('.att-sel').forEach(s => { if (s.value !== '') data[s.dataset.worker] = s.value; });
+  if (!Object.keys(data).length) { showMsg('attendanceMessage','No status set. Use Mark All or select individually.',false); return; }
+
+  setLoading(btn, true);
+  google.script.run
+    .withSuccessHandler(() => { showMsg('attendanceMessage','Attendance saved.',true); markAll(''); setLoading(btn,false); })
+    .withFailureHandler(e => { showMsg('attendanceMessage','Error: '+e.message,false); setLoading(btn,false); })
+    .updateAttendance(date, data);
+}
+
+/* ── Correction ─────────────────────────────────────── */
+function searchAttendance() {
+  const btn = document.getElementById('searchBtn');
+  setLoading(btn, true);
+  google.script.run
+    .withSuccessHandler(rs => { renderCorrection(rs); setLoading(btn,false); })
+    .withFailureHandler(e => { alert('Error: '+e.message); setLoading(btn,false); })
+    .getAttendanceRecords(
+      document.getElementById('correctionDate').value,
+      document.getElementById('searchWorker').value
+    );
+}
+
+// FIX #9: no event dependency in callback refresh
+function refreshCorrection() {
+  google.script.run
+    .withSuccessHandler(renderCorrection)
+    .withFailureHandler(e => alert('Refresh error: '+e.message))
+    .getAttendanceRecords(
+      document.getElementById('correctionDate').value,
+      document.getElementById('searchWorker').value
+    );
+}
+
+function renderCorrection(records) {
+  document.getElementById('correctionData').innerHTML = records.length
+    ? records.map(r => `<tr>
+        <td style="font-family:'DM Mono',monospace">${r.date}</td>
+        <td>${esc(r.worker)}</td>
+        <td>${statusChip(r.status)}</td>
+        <td><div style="display:flex;gap:5px">
+          <button class="btn btn-sm btn-e" onclick="openEditAttend('${r.date}','${esc(r.worker)}',${r.status})"><i class="fas fa-edit"></i></button>
+          <button class="btn btn-sm btn-d" onclick="confirmDelRecord('${r.date}','${esc(r.worker)}')"><i class="fas fa-trash"></i></button>
+        </div></td></tr>`).join('')
+    : '<tr><td colspan="4" style="color:var(--t3);font-style:italic;text-align:center;padding:16px">No records found.</td></tr>';
+}
+
+function openEditAttend(date, worker, status) {
+  CUR_ATTEND = { date, worker };
+  document.getElementById('modalContent').innerHTML = `
+    <p style="font-size:0.78rem;color:var(--t2);margin-bottom:13px;font-family:'DM Mono',monospace">
+      <span style="color:var(--cyan)">${date}</span> &mdash; ${esc(worker)}
+    </p>
+    <div class="fg">
+      <label>New Status</label>
+      <select id="newStatus">
+        <option value="2"   ${status==2   ?'selected':''}>Two Days (2.0)</option>
+        <option value="1.5" ${status==1.5 ?'selected':''}>One &amp; Half (1.5)</option>
+        <option value="1"   ${status==1   ?'selected':''}>Present (1.0)</option>
+        <option value="0.5" ${status==0.5 ?'selected':''}>Half Day (0.5)</option>
+        <option value="0"   ${status==0   ?'selected':''}>Absent (0)</option>
+      </select>
+    </div>
+    <button class="btn btn-p" id="saveAttBtn" onclick="saveAttend()"><i class="fas fa-save"></i> Save</button>`;
+  document.getElementById('editModal').classList.add('open');
+}
+
+function saveAttend() {
+  const btn = document.getElementById('saveAttBtn');
+  setLoading(btn, true);
+  google.script.run
+    .withSuccessHandler(() => { closeModal('editModal'); refreshCorrection(); setLoading(btn,false); })
+    .withFailureHandler(e => { alert('Error: '+e.message); setLoading(btn,false); })
+    .updateAttendanceRecord(CUR_ATTEND.date, CUR_ATTEND.worker, document.getElementById('newStatus').value);
+}
+
+function confirmDelRecord(date, worker) {
+  if (!confirm(`Delete record for ${worker} on ${date}?`)) return;
+  google.script.run
+    .withSuccessHandler(refreshCorrection)
+    .withFailureHandler(e => alert('Error: '+e.message))
+    .deleteAttendanceRecord(date, worker);
+}
+
+/* ── Reports ─────────────────────────────────────────── */
+function refreshReports() {
+  const btn = document.getElementById('reportBtn');
+  const s   = document.getElementById('startDate').value;
+  const e   = document.getElementById('endDate').value;
+  if (!s||!e)  { alert('Select both dates.'); return; }
+  if (s > e)   { alert('Start must be before end.'); return; }
+  setLoading(btn, true);
+  google.script.run
+    .withSuccessHandler(d => { renderReport(d); setLoading(btn,false); })
+    .withFailureHandler(e => { alert('Report error: '+e.message); setLoading(btn,false); })
+    .calculateTotalPay(s, e);
+}
+
+function renderReport(data) {
+  const rb = document.getElementById('reportData');
+  const ta = document.getElementById('totalAmountCell');
+  const tr = document.getElementById('totalRow');
+
+  if (data.error) {
+    rb.innerHTML = `<tr><td colspan="3" style="color:var(--rose)">Error: ${data.error}</td></tr>`;
+    tr.style.display = 'none'; return;
+  }
+  if (!data.reportData || !data.reportData.length) {
+    rb.innerHTML = '<tr><td colspan="3" style="color:var(--t3);font-style:italic;text-align:center;padding:16px">No data in range.</td></tr>';
+    tr.style.display = 'none';
+  } else {
+    rb.innerHTML = data.reportData.map(r =>
+      `<tr><td>${r.name}</td><td style="font-family:'DM Mono',monospace">${r.days}</td><td style="font-family:'DM Mono',monospace">${CX}${r.pay.toFixed(2)}</td></tr>`
+    ).join('');
+    ta.textContent = `${CX}${data.totalAmount.toFixed(2)}`;
+    tr.style.display = 'table-row';
+  }
+
+  const hb = document.getElementById('attendanceHistoryData');
+  if (!data.attendanceHistory || !data.attendanceHistory.length) {
+    hb.innerHTML = '<tr><td style="color:var(--t3);font-style:italic;text-align:center;padding:16px">No history.</td></tr>';
+    return;
+  }
+  const grp = data.attendanceHistory.reduce((a,e) => { (a[e.date]=a[e.date]||[]).push(e); return a; }, {});
+  hb.innerHTML = Object.keys(grp).sort((a,b)=>new Date(a)-new Date(b)).flatMap(d => [
+    `<tr class="date-row"><td colspan="3">${d}</td></tr>`,
+    ...grp[d].map(e => `<tr><td></td><td>${esc(e.worker)}</td><td>${statusChip(e.status)}</td></tr>`),
+    `<tr class="sep-row"><td colspan="3"><hr></td></tr>`
+  ]).join('');
+}
+
+/* ── Modals ─────────────────────────────────────────── */
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id==='editModal')       CUR_ATTEND = null;
+  if (id==='editWorkerModal') CUR_WORKER = null;
+}
+
+/* ── Helpers ────────────────────────────────────────── */
+function statusChip(s) {
+  const m = {'0':['Absent','ca'],'0.5':['Half','ch'],'1':['Present','cp'],'1.5':['1.5 Days','co'],'2':['Two Days','ct']};
+  const [l,c] = m[String(s)] || ['Unknown','ca'];
+  return `<span class="chip ${c}">${l}</span>`;
+}
+function showMsg(id, msg, ok) {
+  const el = document.getElementById(id);
+  el.innerHTML = `<div class="msg ${ok?'ok':'er'}">${msg}</div>`;
+  setTimeout(() => { if(el) el.innerHTML=''; }, 4000);
+}
+function setLoading(btn, v) { btn.classList.toggle('loading', v); }
+function fmtDate(d) { return d.toISOString().split('T')[0]; }
+function esc(s) { return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+</script>
+</body>
+</html>
